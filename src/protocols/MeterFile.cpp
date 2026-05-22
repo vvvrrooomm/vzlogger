@@ -27,7 +27,9 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(__linux__)
 #include <sys/inotify.h>
+#endif
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -143,6 +145,7 @@ MeterFile::~MeterFile() {}
 int MeterFile::open() {
 
 	_notify_fd = -1;
+#if defined(__linux__)
 	if (_interval <= 0) {
 		_notify_fd = inotify_init1(0);
 		print(log_debug, "Watching file \"%s\" for changes", name().c_str(), path());
@@ -158,6 +161,14 @@ int MeterFile::open() {
 			_interval = 1; // assume interval length of 1 sec
 		}
 	}
+#else
+	if (_interval <= 0) {
+		_interval = 1;
+		print(log_warning,
+			  "inotify not available on this platform, falling back to interval=%d s polling",
+			  name().c_str(), _interval);
+	}
+#endif
 
 	_fd = fopen(path(), "r");
 
@@ -185,6 +196,7 @@ ssize_t MeterFile::read(std::vector<Reading> &rds, size_t n) {
 	char *string = 0;
 
 	// wait for file change via inotify
+#if defined(__linux__)
 	const int EVENTSIZE = sizeof(struct inotify_event) + NAME_MAX + 1;
 	if (_notify_fd != -1) {
 		// read all events from fd:
@@ -229,6 +241,11 @@ ssize_t MeterFile::read(std::vector<Reading> &rds, size_t n) {
 
 		} while (len > 0);
 	}
+#else
+	if (_interval > 0) {
+		_cancellable_sleep(_interval);
+	}
+#endif
 
 	// reset file pointer to beginning of file
 	if (_rewind) {
