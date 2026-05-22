@@ -33,11 +33,20 @@
 #ifndef _shared_ptr_hpp_
 #define _shared_ptr_hpp_
 
+#if __cplusplus >= 201103L
+#include <memory>
+
+namespace vz {
+using ::std::enable_shared_from_this;
+using ::std::shared_ptr;
+} // namespace vz
+#else
 #include <tr1/memory>
 
 namespace vz {
 using ::std::tr1::enable_shared_from_this;
 using ::std::tr1::shared_ptr;
 } // namespace vz
+#endif
 
 #endif /* _shared_ptr_hpp_ */
