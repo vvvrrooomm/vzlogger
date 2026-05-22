@@ -9,8 +9,34 @@
 
 #include "CurlSessionProvider.hpp"
 #include <assert.h>
+#include <errno.h>
 #include <time.h>
 #include <unistd.h>
+
+static int vz_pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abs_time) {
+#if defined(__APPLE__)
+	for (;;) {
+		int err = pthread_mutex_trylock(mutex);
+		if (err == 0) {
+			return 0;
+		}
+		if (err != EBUSY) {
+			return err;
+		}
+
+		struct timespec now;
+		clock_gettime(CLOCK_REALTIME, &now);
+		if (now.tv_sec > abs_time->tv_sec ||
+			(now.tv_sec == abs_time->tv_sec && now.tv_nsec >= abs_time->tv_nsec)) {
+			return ETIMEDOUT;
+		}
+
+		usleep(1000);
+	}
+#else
+	return pthread_mutex_timedlock(mutex, abs_time);
+#endif
+}
 
 CurlSessionProvider::CurlSessionProvider() {
 	_map_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -24,9 +50,9 @@ CurlSessionProvider::~CurlSessionProvider() {
 		timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
 		ts.tv_sec += 1;
-		pthread_mutex_timedlock(&_map_mutex,
-								&ts); // try max 1s to acquire the lock. There might have been
-									  // another thread pthread_cancelled while owning the lock.
+		vz_pthread_mutex_timedlock(&_map_mutex,
+								   &ts); // try max 1s to acquire the lock. There might have been
+										 // another thread pthread_cancelled while owning the lock.
 		// check whether any is still inUse:
 		bool inUse = false;
 		for (map_it it = _easy_handle_map.begin(); it != _easy_handle_map.end(); ++it) {
@@ -72,7 +98,7 @@ CURL *CurlSessionProvider::get_easy_session(
 			clock_gettime(CLOCK_REALTIME, &abs_time);
 			abs_time.tv_sec += 1;
 			pthread_testcancel(); // to check whether the thread shall end here!
-			err = pthread_mutex_timedlock(&cur.mutex, &abs_time);
+			err = vz_pthread_mutex_timedlock(&cur.mutex, &abs_time);
 		} while ((err == EAGAIN) || (err == ETIMEDOUT));
 		assert(!cur.inUse);
 		cur.inUse = true;
