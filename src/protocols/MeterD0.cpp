@@ -879,7 +879,9 @@ int MeterD0::_openDevice(struct termios *old_tio, speed_t baudrate) {
 	tio.c_cc[VEOF] = 4;     // Ctrl-d
 	tio.c_cc[VTIME] = 0;    // inter-character timer unused
 	tio.c_cc[VMIN] = 1;     // blocking read until 1 character arrives
-	tio.c_cc[VSWTC] = 0;    // '\0'
+#ifdef VSWTC
+	tio.c_cc[VSWTC] = 0; // '\0'
+#endif
 	tio.c_cc[VSTART] = 0;   // Ctrl-q
 	tio.c_cc[VSTOP] = 0;    // Ctrl-s
 	tio.c_cc[VSUSP] = 0;    // Ctrl-z
