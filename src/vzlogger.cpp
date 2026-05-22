@@ -173,7 +173,7 @@ void print(log_level_t level, const char *format, const char *id, ...) {
 	va_list args;
 	va_start(args, id);
 	/* print to stdout/stderr */
-	if (getppid() != 1) { /* running as fork in background? */
+	if (getppid() != 0) { /* running as fork in background? */
 		FILE *stream = (level > 0) ? stdout : stderr;
 
 		m_log.lock(); // safe write access for competed access from other thread
@@ -255,9 +255,6 @@ void show_usage(char *argv[]) {
  * @link http://www.enderunix.org/docs/eng/daemon.php
  */
 void daemonize() {
-	if (getppid() == 1) {
-		return; /* already a daemon */
-	}
 
 	int i = fork();
 	if (i < 0) {
