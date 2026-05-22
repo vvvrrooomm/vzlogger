@@ -193,6 +193,33 @@ void timespec_add_ms(struct timespec &a, unsigned long ms) {
 	}
 }
 
+static void wait_until_realtime(const struct timespec &req) {
+#if defined(__APPLE__)
+	while (true) {
+		struct timespec now;
+		clock_gettime(CLOCK_REALTIME, &now);
+
+		if (now.tv_sec > req.tv_sec || (now.tv_sec == req.tv_sec && now.tv_nsec >= req.tv_nsec)) {
+			break;
+		}
+
+		struct timespec delta;
+		delta.tv_sec = req.tv_sec - now.tv_sec;
+		delta.tv_nsec = req.tv_nsec - now.tv_nsec;
+		if (delta.tv_nsec < 0) {
+			--delta.tv_sec;
+			delta.tv_nsec += 1000000000l;
+		}
+
+		while ((-1 == nanosleep(&delta, &delta)) && (errno == EINTR)) {
+		}
+	}
+#else
+	while (EINTR == clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &req, NULL)) {
+	}
+#endif
+}
+
 void MeterS0::check_ref_for_overflow() {
 	// protect against _ms_last_impulse overflwing,
 	// it would overflow roughly once a month with 32bit unsigned long
@@ -364,7 +391,7 @@ ssize_t MeterS0::read(std::vector<Reading> &rds, size_t n) {
 	bool is_zero = true;
 	do {
 		req.tv_sec += 1;
-		CANCELLABLE(while (EINTR == clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &req, NULL)));
+		CANCELLABLE(wait_until_realtime(req));
 		// check from counter_thread the current impulses:
 		t_imp = _impulses;
 		t_imp_neg = _impulses_neg;
